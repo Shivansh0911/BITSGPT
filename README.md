@@ -1,0 +1,238 @@
+# BitsGPT
+
+**The AI knowledge assistant for BITS Pilani Hyderabad Campus (BPHC).**
+
+Ask anything — academics, grades, PS-1/PS-2, clubs, fests, hostels, fees, the SU constitution, campus jargon, and more. BitsGPT retrieves answers directly from official BPHC documents and responds like a knowledgeable 4th-year senior.
+
+---
+
+## What it can answer
+
+- Academic rules: CGPA thresholds, credit limits, grading, backlog courses, withdrawals
+- Practice School: PS-1 and PS-2 timelines, eligibility, allocation
+- Fee structure: semester fees, hostel, PS, minor degree costs (2023 batch)
+- Students' Union: constitution, election procedures, no-confidence motions, fests (ATMOS / Pearl / Arena / VM)
+- Clubs and associations: CRUx, ARC, Aeolus, ELAS, Cultural clubs, Regional Associations
+- Hostel life: bhawans, room amenities, mess, ANC, curfew timings
+- Campus locations: CP, SAC, F/G/H/I/J/K blocks, RNT, Rock Garden, Library
+- Digital systems: ERP, Smart Campus, ChronoFactorem, DC++, WiFi login
+- Campus jargon: lite, ghot, snek, dulla, verti, GPL, BST, and more
+- Mental health and support: MPower, Anchor, ICC, ACC, Students Anonymous
+
+---
+
+## Architecture
+
+```
+knowledge_base.md  (47 curated semantic chunks)
+        │
+   [ingest.py]
+   ┌─────────────────────────────┐
+   │  Parse # CHUNK headers      │
+   │  TF-IDF vectorizer (bigrams)│
+   │  Persist → data/            │
+   └─────────────────────────────┘
+        │
+   [rag.py]
+   ┌─────────────────────────────┐
+   │  TF-IDF cosine → top-20     │
+   │  Keyword rerank → top-7     │
+   │  Context assembly (≤2800 w) │
+   │  Groq llama-3.3-70b-versati │
+   │  Streaming response         │
+   └─────────────────────────────┘
+        │
+   [server.py]  ← FastAPI
+   ┌─────────────────────────────┐
+   │  POST /api/chat   (SSE)     │
+   │  GET  /api/health           │
+   │  GET  /api/suggestions      │
+   │  Static: /  (web UI)        │
+   └─────────────────────────────┘
+```
+
+**Stack:** Python · FastAPI · scikit-learn (TF-IDF) · Groq API (llama-3.3-70b) · Vanilla JS
+
+---
+
+## Quick start
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/Shivansh0911/BITSGPT.git
+cd BITSGPT
+pip install -r requirements.txt
+```
+
+### 2. Get a free Groq API key
+
+Sign up at [console.groq.com](https://console.groq.com/) — the free tier gives 14,400 requests/day and 30k tokens/minute.
+
+```bash
+cp .env.example .env
+# Edit .env and paste your key:
+# GROQ_API_KEY=gsk_...
+```
+
+### 3. Build the knowledge index
+
+```bash
+python ingest.py
+```
+
+Output:
+```
+  BitsGPT — Building Knowledge Index
+[1/3] Parsing knowledge_base.md...
+      47 semantic chunks extracted
+[2/3] Building TF-IDF index...
+      Vocabulary : 12847 terms
+      Matrix     : (47, 12847)
+[3/3] Saving index...
+✓ Done — 47 chunks indexed
+```
+
+### 4a. Launch the web UI
+
+```bash
+export GROQ_API_KEY=gsk_...   # or source .env
+uvicorn server:app --port 8000
+# Open http://localhost:8000
+```
+
+### 4b. CLI — single question
+
+```bash
+python rag.py "What is the minimum CGPA at BPHC?"
+```
+
+### 4c. CLI — interactive streaming
+
+```bash
+python rag.py --interactive
+```
+
+---
+
+## API reference
+
+### POST /api/chat
+
+**Request:**
+```json
+{ "message": "How does PS-2 work?", "stream": true }
+```
+
+**Streaming response (SSE):**
+```
+data: {"type": "chunk", "text": "PS-2 (Practice School II) is a"}
+data: {"type": "chunk", "text": " 5–6 month industry posting..."}
+data: {"type": "done", "sources": [{"source": "knowledge_base", "chunk_title": "PRACTICE SCHOOL (PS-1 AND PS-2)", "score": 0.847}]}
+```
+
+**Non-streaming response** (`stream: false`):
+```json
+{
+  "query": "How does PS-2 work?",
+  "answer": "PS-2 (Practice School II) is a ~5–6 month industry posting...",
+  "sources": [
+    { "source": "knowledge_base", "chunk_title": "PRACTICE SCHOOL (PS-1 AND PS-2)", "score": 0.847 }
+  ]
+}
+```
+
+### GET /api/health
+```json
+{ "status": "ok", "model": "llama-3.3-70b-versatile", "index_ready": true, "groq_key_set": true }
+```
+
+### GET /api/suggestions
+Returns a list of sample questions to display in the UI.
+
+---
+
+## File structure
+
+```
+BITSGPT/
+├── knowledge_base.md      ← 47-chunk BPHC knowledge base (source of truth)
+├── ingest.py              ← Build TF-IDF index (run once)
+├── rag.py                 ← Retrieval pipeline + Groq LLM
+├── server.py              ← FastAPI server (REST + SSE)
+├── requirements.txt
+├── .env.example
+├── .gitignore
+├── static/
+│   ├── index.html         ← Chat web UI
+│   └── app.js             ← Frontend logic
+└── data/                  ← Generated by ingest.py (gitignored)
+    ├── tfidf_index.pkl
+    └── chunks.json
+```
+
+---
+
+## Sample questions
+
+```
+What is the minimum CGPA required to stay enrolled at BPHC?
+How does a no-confidence motion against the SU President work?
+What are the fee components for 2023 batch students?
+Explain PS-1 and PS-2 — when do they happen and who is eligible?
+What clubs are under the Students' Union?
+What is the role of CRC and how many members does it have?
+How does CGPA and grading work at BPHC?
+What are the hostels at BPHC and what do rooms include?
+What food outlets are at Connaught Place?
+What is ATMOS and when does it happen?
+What does 'lite' mean in BITS jargon?
+How many credits do I need for each elective category to graduate?
+What is the Technical Senate and how is the Technical Secretary elected?
+How do I apply for a minor degree at BPHC?
+What is the bus route from campus to the city?
+```
+
+---
+
+## Retrieval parameters
+
+| Parameter      | Value  | Description                                  |
+|----------------|--------|----------------------------------------------|
+| TOP_K_RETRIEVE | 20     | Candidates from TF-IDF cosine similarity     |
+| TOP_K_FINAL    | 7      | Chunks sent to LLM after re-ranking          |
+| MAX_CTX_WORDS  | 2800   | Maximum context word budget                  |
+| CHUNK_SIZE     | 600 w  | Sliding window size for large chunks         |
+| CHUNK_OVERLAP  | 80 w   | Overlap between adjacent sliding chunks      |
+| KB boost       | 1.3×   | Score multiplier for curated KB chunks       |
+
+---
+
+## Knowledge base
+
+`knowledge_base.md` contains 47 verified semantic chunks compiled from:
+
+| Source | Coverage |
+|--------|----------|
+| SU Constitution 2021 | Election rules, no-confidence motions, constitutional amendments, EC/CRC powers |
+| Procedure Manual 2025 | OT types, merchandise rules, semester reports, financial transactions |
+| Academic Bulletin 2023-24 | Programmes, grading, CGPA rules, course types, graduation requirements |
+| Timetable Sem 1 2025-26 | Academic calendar, exam schedule, key dates |
+| WITW 2023 | Hostel life, campus map, clubs, food, jargon, survival tips |
+| Fee Estimate 2023 batch | Year-wise fee breakdown: semester, hostel, PS, minor, caution deposit |
+
+To add more sources (PDFs), use `pypdf` to extract text and add chunks to `knowledge_base.md` following the `# CHUNK NNN — TITLE` format, then re-run `python ingest.py`.
+
+---
+
+## Built by
+
+**CRUx** — The Programming and Computing Club of BITS Pilani Hyderabad Campus.
+
+GitHub: [github.com/crux-bphc](https://github.com/crux-bphc)
+
+---
+
+## License
+
+MIT
