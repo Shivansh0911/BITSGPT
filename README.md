@@ -24,7 +24,7 @@ Ask anything — academics, grades, PS-1/PS-2, clubs, fests, hostels, fees, the 
 ## Architecture
 
 ```
-knowledge_base.md  (47 curated semantic chunks)
+knowledge_base.md  (48 curated semantic chunks)
         │
    [ingest.py]
    ┌─────────────────────────────┐
@@ -85,12 +85,12 @@ Output:
 ```
   BitsGPT — Building Knowledge Index
 [1/3] Parsing knowledge_base.md...
-      47 semantic chunks extracted
+      48 semantic chunks extracted
 [2/3] Building TF-IDF index...
-      Vocabulary : 12847 terms
-      Matrix     : (47, 12847)
+      Vocabulary : 7975 terms
+      Matrix     : (48, 7975)
 [3/3] Saving index...
-✓ Done — 47 chunks indexed
+✓ Done — 48 chunks indexed
 ```
 
 ### 4a. Launch the web UI
@@ -156,8 +156,9 @@ Returns a list of sample questions to display in the UI.
 
 ```
 BITSGPT/
-├── knowledge_base.md      ← 47-chunk BPHC knowledge base (source of truth)
+├── knowledge_base.md      ← 48-chunk BPHC knowledge base (source of truth)
 ├── ingest.py              ← Build TF-IDF index (run once)
+├── tokenizer.py           ← Shared Porter stemmer (used by ingest + rag)
 ├── rag.py                 ← Retrieval pipeline + Groq LLM
 ├── server.py              ← FastAPI server (REST + SSE)
 ├── requirements.txt
@@ -210,7 +211,7 @@ What is the bus route from campus to the city?
 
 ## Knowledge base
 
-`knowledge_base.md` contains 47 verified semantic chunks compiled from:
+`knowledge_base.md` contains 48 verified semantic chunks compiled from:
 
 | Source | Coverage |
 |--------|----------|
@@ -221,15 +222,7 @@ What is the bus route from campus to the city?
 | WITW 2023 | Hostel life, campus map, clubs, food, jargon, survival tips |
 | Fee Estimate 2023 batch | Year-wise fee breakdown: semester, hostel, PS, minor, caution deposit |
 
-To add more sources (PDFs), use `pypdf` to extract text and add chunks to `knowledge_base.md` following the `# CHUNK NNN — TITLE` format, then re-run `python ingest.py`.
-
----
-
-## Built by
-
-**CRUx** — The Programming and Computing Club of BITS Pilani Hyderabad Campus.
-
-GitHub: [github.com/crux-bphc](https://github.com/crux-bphc)
+To add more sources, extract text from your PDFs and append chunks to `knowledge_base.md` following the `# CHUNK NNN — TITLE` format, then re-run `python ingest.py`.
 
 ---
 
