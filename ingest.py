@@ -1,5 +1,5 @@
 """
-BitsGPT — Ingestion Pipeline
+BitsGPT -- Ingestion Pipeline
 Parses the BPHC knowledge base and builds a TF-IDF index for fast retrieval.
 
 Run once:
@@ -9,12 +9,19 @@ Re-run whenever knowledge_base.md is updated.
 """
 
 import re
+import sys
 import json
 import hashlib
 import pickle
 from pathlib import Path
 
+# ensure UTF-8 output on Windows (avoids cp1252 UnicodeEncodeError)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 from sklearn.feature_extraction.text import TfidfVectorizer
+from tokenizer import stem_tokenize
+
 
 BASE_DIR = Path(__file__).parent
 KB_PATH = BASE_DIR / "knowledge_base.md"
@@ -96,11 +103,10 @@ def ingest():
     print("\n[2/3] Building TF-IDF index...")
     texts = [c["text"] for c in chunks]
     vectorizer = TfidfVectorizer(
-        ngram_range=(1, 2),
         max_features=16384,
         sublinear_tf=True,
         min_df=1,
-        analyzer="word",
+        analyzer=stem_tokenize,
     )
     tfidf_matrix = vectorizer.fit_transform(texts)
     print(f"      Vocabulary : {len(vectorizer.vocabulary_)} terms")

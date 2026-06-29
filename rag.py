@@ -1,6 +1,6 @@
 """
-BitsGPT — RAG Query Pipeline
-TF-IDF retrieval → keyword rerank → Groq LLM (llama-3.3-70b)
+BitsGPT -- RAG Query Pipeline
+TF-IDF retrieval -> keyword rerank -> Groq LLM (llama-3.3-70b)
 
 Usage:
     python rag.py "What is the minimum CGPA at BPHC?"
@@ -11,6 +11,10 @@ Usage:
 import os
 import re
 import sys
+
+# ensure UTF-8 output on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import json
 import pickle
 import argparse
@@ -24,6 +28,7 @@ load_dotenv()
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from groq import Groq
+from tokenizer import stem_tokenize  # noqa: F401 — must be importable for pickle
 
 BASE_DIR = Path(__file__).parent
 INDEX_PATH = BASE_DIR / "data" / "tfidf_index.pkl"
@@ -48,6 +53,20 @@ STRICT RULES:
 """
 
 
+_BPHC_SYNONYMS = {
+    "hostel":    "bhawan",
+    "hostels":   "bhawans",
+    "dorm":      "bhawan",
+    "dormitory": "bhawan",
+    "canteen":   "mess",
+    "cafeteria": "mess",
+    "timetable": "time table schedule",
+    "professor": "faculty instructor",
+    "campus center": "central plaza cp",
+    "central plaza": "cp",
+}
+
+
 class BPHCRetriever:
     def __init__(self):
         if not INDEX_PATH.exists() or not CHUNKS_PATH.exists():
@@ -60,6 +79,15 @@ class BPHCRetriever:
         self.tfidf_matrix = idx["matrix"]
         with open(CHUNKS_PATH, encoding="utf-8") as f:
             self.chunks = json.load(f)
+
+    @staticmethod
+    def _expand(query: str) -> str:
+        lower = query.lower()
+        extra = []
+        for term, expansion in _BPHC_SYNONYMS.items():
+            if term in lower:
+                extra.append(expansion)
+        return f"{query} {' '.join(extra)}" if extra else query
 
     def retrieve(self, query: str, top_k: int = TOP_K_RETRIEVE) -> List[Dict]:
         q_vec = self.vectorizer.transform([query])
@@ -76,16 +104,23 @@ class BPHCRetriever:
     def rerank(self, query: str, candidates: List[Dict], top_k: int = TOP_K_FINAL) -> List[Dict]:
         q_tokens = set(re.findall(r"\b\w+\b", query.lower()))
         for c in candidates:
-            text_tokens = set(re.findall(r"\b\w+\b", c["text"].lower()))
-            overlap = len(q_tokens & text_tokens) / max(len(q_tokens), 1)
+            text_tokens  = set(re.findall(r"\b\w+\b", c["text"].lower()))
+            title_tokens = set(re.findall(r"\b\w+\b", c["metadata"].get("chunk_title", "").lower()))
+            body_overlap  = len(q_tokens & text_tokens)  / max(len(q_tokens), 1)
+            title_overlap = len(q_tokens & title_tokens) / max(len(q_tokens), 1)
             kb_boost = 1.3 if c["metadata"].get("doc_type") == "curated" else 1.0
-            c["final_score"] = (c["tfidf_score"] * kb_boost) + (overlap * 0.15)
+            c["final_score"] = (
+                c["tfidf_score"] * kb_boost
+                + body_overlap  * 0.15
+                + title_overlap * 0.40   # heavily promote chunks whose title matches the query
+            )
         ranked = sorted(candidates, key=lambda x: x["final_score"], reverse=True)
         return ranked[:top_k]
 
     def get_context(self, query: str):
-        candidates = self.retrieve(query)
-        top_chunks = self.rerank(query, candidates)
+        expanded = self._expand(query)
+        candidates = self.retrieve(expanded)
+        top_chunks = self.rerank(expanded, candidates)
         ctx_parts, word_count, used = [], 0, []
         for c in top_chunks:
             words = c["text"].split()
