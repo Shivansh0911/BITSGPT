@@ -18,6 +18,9 @@ import textwrap
 from pathlib import Path
 from typing import List, Dict, Optional, Generator
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from groq import Groq

@@ -14,7 +14,6 @@ import hashlib
 import pickle
 from pathlib import Path
 
-import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 BASE_DIR = Path(__file__).parent

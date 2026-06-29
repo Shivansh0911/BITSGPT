@@ -14,13 +14,9 @@ async function loadSuggestions() {
   try {
     const res  = await fetch('/api/suggestions');
     const data = await res.json();
-    sugGrid.innerHTML = data.questions
-      .slice(0, 8)
-      .map(q => `<button class="suggestion-btn" onclick="sendMessage(${JSON.stringify(q)})">${q}</button>`)
-      .join('');
+    renderSuggestions(data.questions.slice(0, 8));
   } catch {
-    // silently skip if server is offline
-    sugGrid.innerHTML = [
+    renderSuggestions([
       'What is the minimum CGPA?',
       'How does PS-1 and PS-2 work?',
       'What clubs can I join?',
@@ -29,10 +25,19 @@ async function loadSuggestions() {
       'How to apply for a minor?',
       "What does 'lite' mean?",
       'What are the fee components?',
-    ]
-      .map(q => `<button class="suggestion-btn" onclick="sendMessage(${JSON.stringify(q)})">${q}</button>`)
-      .join('');
+    ]);
   }
+}
+
+function renderSuggestions(questions) {
+  sugGrid.innerHTML = '';
+  questions.forEach(q => {
+    const btn = document.createElement('button');
+    btn.className = 'suggestion-btn';
+    btn.textContent = q;
+    btn.addEventListener('click', () => sendMessage(q));
+    sugGrid.appendChild(btn);
+  });
 }
 
 loadSuggestions();
@@ -107,21 +112,23 @@ async function sendMessage(text) {
 
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
+        let event;
         try {
-          const event = JSON.parse(line.slice(6));
-          if (event.type === 'chunk') {
-            fullText += event.text;
-            contentEl.innerHTML = renderMarkdown(fullText) + cursorHTML();
-          } else if (event.type === 'done') {
-            contentEl.innerHTML = renderMarkdown(fullText);
-            if (event.sources && event.sources.length > 0) {
-              botBubble.querySelector('.bubble').appendChild(buildSources(event.sources));
-            }
-          } else if (event.type === 'error') {
-            throw new Error(event.text);
+          event = JSON.parse(line.slice(6));
+        } catch {
+          continue; // skip malformed SSE lines
+        }
+        if (event.type === 'chunk') {
+          fullText += event.text;
+          contentEl.innerHTML = renderMarkdown(fullText) + cursorHTML();
+          scrollToBottom();
+        } else if (event.type === 'done') {
+          contentEl.innerHTML = renderMarkdown(fullText);
+          if (event.sources && event.sources.length > 0) {
+            botBubble.querySelector('.bubble').appendChild(buildSources(event.sources));
           }
-        } catch (parseErr) {
-          // skip malformed SSE lines
+        } else if (event.type === 'error') {
+          throw new Error(event.text);
         }
       }
     }

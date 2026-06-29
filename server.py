@@ -10,6 +10,10 @@ Run:
 import json
 import os
 from pathlib import Path
+from typing import Optional
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,7 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_bot: BitsGPT | None = None
+_bot: Optional[BitsGPT] = None
 
 
 def get_bot() -> BitsGPT:
@@ -69,7 +73,7 @@ async def chat(req: ChatRequest):
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
     try:
         bot = get_bot()
-    except RuntimeError as e:
+    except (RuntimeError, FileNotFoundError) as e:
         raise HTTPException(status_code=503, detail=str(e))
 
     if req.stream:
